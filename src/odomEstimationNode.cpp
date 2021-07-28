@@ -6,7 +6,7 @@
 #include <cmath>
 #include <vector>
 #include <mutex>
-#include <queue>
+#include <deque>
 #include <thread>
 #include <chrono>
 
@@ -16,6 +16,9 @@
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
+
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
 
 //pcl lib
 #include <pcl_conversions/pcl_conversions.h>
@@ -28,21 +31,35 @@
 
 OdomEstimationClass odomEstimation;
 std::mutex mutex_lock;
-std::queue<sensor_msgs::PointCloud2ConstPtr> pointCloudEdgeBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> pointCloudSurfBuf;
+std::deque<sensor_msgs::PointCloud2ConstPtr> pointCloudEdgeBuf;
+std::deque<sensor_msgs::PointCloud2ConstPtr> pointCloudSurfBuf;
 lidar::Lidar lidar_param;
+
+const size_t maxQueueSize = 5;
 
 ros::Publisher pubLaserOdometry;
 void velodyneSurfHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 {
     mutex_lock.lock();
-    pointCloudSurfBuf.push(laserCloudMsg);
+    while ( pointCloudSurfBuf.size() > maxQueueSize ) pointCloudSurfBuf.pop_front();
+    pointCloudSurfBuf.push_back(laserCloudMsg);
     mutex_lock.unlock();
 }
 void velodyneEdgeHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 {
     mutex_lock.lock();
-    pointCloudEdgeBuf.push(laserCloudMsg);
+    while ( pointCloudEdgeBuf.size() > maxQueueSize ) pointCloudEdgeBuf.pop_front();
+    pointCloudEdgeBuf.push_back(laserCloudMsg);
+    mutex_lock.unlock();
+}
+
+void subLaserCloudCallback( const sensor_msgs::PointCloud2ConstPtr & laserEdgeCloudMsg, const sensor_msgs::PointCloud2ConstPtr & laserSurfCloudMsg )
+{
+    mutex_lock.lock();
+    while ( pointCloudSurfBuf.size() > maxQueueSize ) pointCloudSurfBuf.pop_front();
+    pointCloudSurfBuf.push_back(laserSurfCloudMsg);
+    while ( pointCloudEdgeBuf.size() > maxQueueSize ) pointCloudEdgeBuf.pop_front();
+    pointCloudEdgeBuf.push_back(laserEdgeCloudMsg);
     mutex_lock.unlock();
 }
 
@@ -56,14 +73,14 @@ void odom_estimation(){
             //read data
             mutex_lock.lock();
             if(!pointCloudSurfBuf.empty() && (pointCloudSurfBuf.front()->header.stamp.toSec()<pointCloudEdgeBuf.front()->header.stamp.toSec()-0.5*lidar_param.scan_period)){
-                pointCloudSurfBuf.pop();
+                pointCloudSurfBuf.pop_front();
                 ROS_WARN_ONCE("time stamp unaligned with extra point cloud, pls check your data --> odom correction");
                 mutex_lock.unlock();
                 continue;  
             }
 
             if(!pointCloudEdgeBuf.empty() && (pointCloudEdgeBuf.front()->header.stamp.toSec()<pointCloudSurfBuf.front()->header.stamp.toSec()-0.5*lidar_param.scan_period)){
-                pointCloudEdgeBuf.pop();
+                pointCloudEdgeBuf.pop_front();
                 ROS_WARN_ONCE("time stamp unaligned with extra point cloud, pls check your data --> odom correction");
                 mutex_lock.unlock();
                 continue;  
@@ -75,8 +92,8 @@ void odom_estimation(){
             pcl::fromROSMsg(*pointCloudEdgeBuf.front(), *pointcloud_edge_in);
             pcl::fromROSMsg(*pointCloudSurfBuf.front(), *pointcloud_surf_in);
             ros::Time pointcloud_time = (pointCloudSurfBuf.front())->header.stamp;
-            pointCloudEdgeBuf.pop();
-            pointCloudSurfBuf.pop();
+            pointCloudEdgeBuf.pop_front();
+            pointCloudSurfBuf.pop_front();
             mutex_lock.unlock();
 
             if(is_odom_inited == false){
@@ -92,7 +109,7 @@ void odom_estimation(){
                 total_frame++;
                 float time_temp = elapsed_seconds.count() * 1000;
                 total_time+=time_temp;
-                ROS_INFO("average odom estimation time %f ms \n \n", total_time/total_frame);
+                ROS_INFO("average odom estimation time %f ms recent: %f \n", total_time/total_frame, elapsed_seconds.count()*1000);
             }
 
 
@@ -154,9 +171,10 @@ int main(int argc, char **argv)
     lidar_param.setMinDistance(min_dis);
 
     odomEstimation.init(lidar_param, map_resolution);
-    ros::Subscriber subEdgeLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_edge", 100, velodyneEdgeHandler);
-    ros::Subscriber subSurfLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_surf", 100, velodyneSurfHandler);
-
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subEdgeLaserCloud (nh,"/laser_cloud_edge", maxQueueSize);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subSurfLaserCloud (nh,"/laser_cloud_surf", maxQueueSize);
+    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> sync(subEdgeLaserCloud, subSurfLaserCloud, 10);
+    sync.registerCallback(boost::bind(&subLaserCloudCallback, _1, _2));
     pubLaserOdometry = nh.advertise<nav_msgs::Odometry>("/odom", 100);
     std::thread odom_estimation_process{odom_estimation};
 

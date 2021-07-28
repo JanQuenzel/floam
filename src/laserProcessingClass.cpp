@@ -2,6 +2,7 @@
 // Email wh200720041@gmail.com
 // Homepage https://wanghan.pro
 #include "laserProcessingClass.h"
+#include <ros/ros.h>
 
 void LaserProcessingClass::init(lidar::Lidar lidar_param_in){
     
@@ -11,8 +12,8 @@ void LaserProcessingClass::init(lidar::Lidar lidar_param_in){
 
 void LaserProcessingClass::featureExtraction(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_edge, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_surf){
 
-    std::vector<int> indices;
-    pcl::removeNaNFromPointCloud(*pc_in, indices);
+    //std::vector<int> indices;
+    //pcl::removeNaNFromPointCloud(*pc_in, indices);
 
 
     int N_SCANS = lidar_param.num_lines;
@@ -23,9 +24,10 @@ void LaserProcessingClass::featureExtraction(const pcl::PointCloud<pcl::PointXYZ
 
     for (int i = 0; i < (int) pc_in->points.size(); i++)
     {
+        if ( !pc_in->points[i].getVector3fMap().allFinite() ) continue;
         int scanID=0;
         double distance = sqrt(pc_in->points[i].x * pc_in->points[i].x + pc_in->points[i].y * pc_in->points[i].y);
-        if(distance<lidar_param.min_distance || distance>lidar_param.max_distance)
+        if(distance<lidar_param.min_distance || distance>lidar_param.max_distance )
             continue;
         double angle = atan(pc_in->points[i].z / distance) * 180 / M_PI;
         
@@ -39,23 +41,38 @@ void LaserProcessingClass::featureExtraction(const pcl::PointCloud<pcl::PointXYZ
         }
         else if (N_SCANS == 32)
         {
-            scanID = int((angle + 92.0/3.0) * 3.0 / 4.0);
-            if (scanID > (N_SCANS - 1) || scanID < 0)
+            if ( pc_in->height > 1 )
+                scanID = i % pc_in->height;
+            else
             {
-                continue;
+                scanID = int((angle + 92.0/3.0) * 3.0 / 4.0);
+                if (scanID > (N_SCANS - 1) || scanID < 0)
+                {
+                    continue;
+                }
             }
         }
         else if (N_SCANS == 64)
-        {   
-            if (angle >= -8.83)
-                scanID = int((2 - angle) * 3.0 + 0.5);
+        {
+            if ( pc_in->height > 1 )
+                scanID = i % pc_in->height;
             else
-                scanID = N_SCANS / 2 + int((-8.83 - angle) * 2.0 + 0.5);
-
-            if (angle > 2 || angle < -24.33 || scanID > 63 || scanID < 0)
             {
-                continue;
+                if (angle >= -8.83)
+                    scanID = int((2 - angle) * 3.0 + 0.5);
+                else
+                    scanID = N_SCANS / 2 + int((-8.83 - angle) * 2.0 + 0.5);
+
+                if (angle > 2 || angle < -24.33 || scanID > 63 || scanID < 0)
+                {
+                    continue;
+                }
             }
+        }
+        else if (N_SCANS == 128)
+        {
+            scanID = i % pc_in->height;
+            //ROS_INFO_STREAM("scanId: " << scanID << " w: " << pc_in->width << " h: " << pc_in->height);
         }
         else
         {

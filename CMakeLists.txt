@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
   eigen_conversions
+  message_filters
 )
 
 find_package(Eigen3)
@@ -48,7 +49,7 @@ link_directories(
 
 catkin_package(
   CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs
-  DEPENDS EIGEN3 PCL Ceres 
+  DEPENDS EIGEN3 PCL CERES 
   INCLUDE_DIRS include
 )
 
@@ -62,4 +63,3 @@ target_link_libraries(floam_odom_estimation_node ${EIGEN3_LIBRARIES} ${catkin_LI
 
 add_executable(floam_laser_mapping_node src/laserMappingNode.cpp src/laserMappingClass.cpp src/lidar.cpp)
 target_link_libraries(floam_laser_mapping_node ${EIGEN3_LIBRARIES} ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
-

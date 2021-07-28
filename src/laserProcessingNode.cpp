@@ -6,7 +6,7 @@
 #include <cmath>
 #include <vector>
 #include <mutex>
-#include <queue>
+#include <deque>
 #include <thread>
 #include <chrono>
 
@@ -30,17 +30,20 @@
 
 LaserProcessingClass laserProcessing;
 std::mutex mutex_lock;
-std::queue<sensor_msgs::PointCloud2ConstPtr> pointCloudBuf;
+std::deque<sensor_msgs::PointCloud2ConstPtr> pointCloudBuf;
 lidar::Lidar lidar_param;
 
 ros::Publisher pubEdgePoints;
 ros::Publisher pubSurfPoints;
 ros::Publisher pubLaserCloudFiltered;
 
+constexpr size_t maxQueueSize = 5;
+
 void velodyneHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 {
     mutex_lock.lock();
-    pointCloudBuf.push(laserCloudMsg);
+    while(pointCloudBuf.size() > maxQueueSize) pointCloudBuf.pop_front();
+    pointCloudBuf.push_back(laserCloudMsg);
     mutex_lock.unlock();
    
 }
@@ -56,7 +59,7 @@ void laser_processing(){
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_in(new pcl::PointCloud<pcl::PointXYZI>());
             pcl::fromROSMsg(*pointCloudBuf.front(), *pointcloud_in);
             ros::Time pointcloud_time = (pointCloudBuf.front())->header.stamp;
-            pointCloudBuf.pop();
+            pointCloudBuf.pop_front();
             mutex_lock.unlock();
 
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_edge(new pcl::PointCloud<pcl::PointXYZI>());          
@@ -111,12 +114,14 @@ int main(int argc, char **argv)
     double scan_period= 0.1;
     double max_dis = 60.0;
     double min_dis = 2.0;
+    std::string scan_topic = "/velodyne_points";
 
     nh.getParam("/scan_period", scan_period); 
     nh.getParam("/vertical_angle", vertical_angle); 
     nh.getParam("/max_dis", max_dis);
     nh.getParam("/min_dis", min_dis);
     nh.getParam("/scan_line", scan_line);
+    nh.getParam("/scan_topic", scan_topic);
 
     lidar_param.setScanPeriod(scan_period);
     lidar_param.setVerticalAngle(vertical_angle);
@@ -126,13 +131,13 @@ int main(int argc, char **argv)
 
     laserProcessing.init(lidar_param);
 
-    ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 100, velodyneHandler);
+    ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(scan_topic, maxQueueSize, velodyneHandler);
 
-    pubLaserCloudFiltered = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_points_filtered", 100);
+    pubLaserCloudFiltered = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_points_filtered", 10);
 
-    pubEdgePoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_edge", 100);
+    pubEdgePoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_edge", 10);
 
-    pubSurfPoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf", 100); 
+    pubSurfPoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf", 10);
 
     std::thread laser_processing_process{laser_processing};
 

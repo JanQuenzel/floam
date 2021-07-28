@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2020_11_12_DRZ/bag_mbzirc8_2020-11-12-17-25-36.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2020-11-12-17-25-36_comp.bag"/>
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2020_11_12_DRZ/bag_mbzirc8_2020-11-12-17-29-29.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2020-11-12-17-29-29_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-13-45-56.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-13-45-56_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-16-34.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-16-34_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-28-50.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-28-50_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-31-11.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-31-11_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-32-45.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-32-45_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-47-42.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-47-42_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-49-33.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-49-33_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-52-55.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-52-55_comp.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag_play" args="--clock -r 1 /media/jquenzel/CopterExchange_1/2021_06_21_mocap/bag_mbzirc8_2021-06-21-14-55-27.bag /media/jquenzel/CopterExchange/bag_mbzirc8_2021-06-21-14-55-27_comp.bag"/>-->
+       
+    <!-- For Velodyne VLP-16 
+    <param name="scan_line" value="16" />
+    -->
+
+    <!-- For Velodyne HDL-32 
+    <param name="scan_line" value="32" />
+    -->
+
+    <!-- For Velodyne HDL-64 
+    <param name="scan_line" value="64" />
+    -->
+    
+    <!-- For Ouster OS-0 -->
+    <param name="scan_line" value="128" />
+    
+    <!--- Sim Time -->
+    <param name="/use_sim_time" value="true" />
+    <param name="scan_period" value="0.1" />
+
+    <!--<param name="scan_topic" value="/os_cloud_node/points" />-->
+    <param name="scan_topic" value="/os_cloud_node/points_compensated" />
+    <param name="vertical_angle" type="double" value="2.0" />
+    <param name="max_dis" type="double" value="50.0" />
+    <param name="map_resolution" type="double" value="0.4" />
+    <param name="min_dis" type="double" value="1.0" />
+    <!--- -->
+    <node pkg="floam" type="floam_odom_estimation_node" name="floam_odom_estimation_node" output="screen"/>
+    <node pkg="floam" type="floam_laser_processing_node" name="floam_laser_processing_node" output="screen"/>
+    <!--<node pkg="floam" type="floam_laser_mapping_node" name="floam_laser_mapping_node" output="screen"/>-->
+
+    <node pkg="tf" type="static_transform_publisher" name="word2map_tf"  args="0 0 0 0 0 0 /world /map 10" />
+    
+    <arg name="rviz" default="false" />
+    <group if="$(arg rviz)">
+        <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find floam)/rviz/floam_mapping.rviz" />
+    </group>
+
+    
+  	<node pkg="hector_trajectory_server" type="hector_trajectory_server" name="trajectory_server_loam" ns="gt" >
+        <param name="/target_frame_name" value="world" />
+        <param name="/source_frame_name" value="velodyne" />
+        <param name="/trajectory_update_rate" value="10.0" />
+        <param name="/trajectory_publish_rate" value="10.0" />
+    </node>
+    <node pkg="hector_trajectory_server" type="hector_trajectory_server" name="trajectory_server_loam" ns="base_link" >
+        <param name="/target_frame_name" value="world" />
+        <param name="/source_frame_name" value="base_link" />
+        <param name="/trajectory_update_rate" value="10.0" />
+        <param name="/trajectory_publish_rate" value="10.0" />
+    </node>
+
+</launch>

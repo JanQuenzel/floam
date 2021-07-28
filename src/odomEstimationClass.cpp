@@ -3,6 +3,7 @@
 // Homepage https://wanghan.pro
 
 #include "odomEstimationClass.h"
+#include <fstream>
 
 void OdomEstimationClass::init(lidar::Lidar lidar_param, double map_resolution){
     //init local map
@@ -77,6 +78,16 @@ void OdomEstimationClass::updatePointsToMap(const pcl::PointCloud<pcl::PointXYZI
     odom.linear() = q_w_curr.toRotationMatrix();
     odom.translation() = t_w_curr;
     addPointsToMap(downsampledEdgeCloud,downsampledSurfCloud);
+
+    {
+        // write to file:
+        static std::ofstream posesFile ("./floam_odom_poses.txt");
+        if( posesFile.is_open() )
+        {
+             posesFile << (edge_in->header.stamp*1000) << " " << t_w_curr.x() << " " << t_w_curr.y() << " " << t_w_curr.z()
+                       << " " << q_w_curr.x() << " " << q_w_curr.y() << " " << q_w_curr.z() << " " << q_w_curr.w() <<"\n";
+        }
+    }
 
 }
 
